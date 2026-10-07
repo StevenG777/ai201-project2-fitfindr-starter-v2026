@@ -41,6 +41,7 @@
 
 <!-- Three or four sentences: what a user asks for, and what they get back. -->
 
+FitFindr helps a shopper decide whether a thrifted find is worth buying. The user types a request in plain language, such as "vintage graphic tee under $30, size M", along with the clothes they already own. The agent searches a set of secondhand listings, picks the best match, and suggests one or two outfits that combine it with pieces from their wardrobe, or general styling advice if the wardrobe is empty. It ends with a short social-media caption for the find. If nothing matches, it stops early and tells the user which filter (keywords, size, or budget) to loosen instead of making up an outfit.
 
 
 ---
@@ -109,13 +110,13 @@
      The grader checks your code against what you claim here, so the file and
      function have to be real. -->
 
-**Branch rule:**
+**Branch rule:** If `search_listings` returns an empty list, put a message in `session["error"]` that names the filters that were applied and what to loosen (keywords, size, budget), and stop: `suggest_outfit` and `create_fit_card` are never called and `session["fit_card"]` stays `None`. Otherwise take the first result and go to `suggest_outfit`. A second, defensive check follows it: if `suggest_outfit` returns a blank string, set `session["error"]` and stop before `create_fit_card`. (An empty wardrobe is not a branch in the loop; `suggest_outfit` handles it by returning general styling advice.)
 
 **Where it lives:** `agent.py::run_agent`
 
-**How the query is parsed:** <!-- regex, string splitting, or asking the model — say which -->
+**How the query is parsed:** Regex (`agent.py::_parse_query`), not the model, so it is free, deterministic and testable. `size` is the text after "size" ("size M", "size US 9", "size W28", "size S/M"); `max_price` is a number after under/below/max/up to/less than, or any `$N`; `description` is what remains after removing those and filler words. Known gap: phrasings like "30 dollars" or "size is M" are not recognised.
 
-**What moves through the session:** <!-- which fields, in what order -->
+**What moves through the session:** Each result is written to the session and read back from it for the next call, in this order: `query` → `parsed` → `search_results` → `selected_item` (first result) → `outfit_suggestion` → `fit_card`. `error` is set only when the run stops early, and `wardrobe` is passed in at the start.
 
 ---
 
@@ -174,15 +175,15 @@ Three runs differ (TEMPERATURE 0.9, cache bypassed in this tool). Size match is 
 
 **Moment 1**
 
-- *What I asked for:*
-- *What came back:*
-- *What I changed:*
+- *What I asked for:* I described my loop as a flow (empty search → message and stop; otherwise suggest an outfit, then a fit card, with a message if there is no outfit) and asked Claude to build `run_agent()` in `agent.py` from it.
+- *What came back:* A working loop, but I only caught one bug by running it: the query parser read "size W28" as size `"W"`, because the size regex stopped at the first non-letter, so a size like that could never match a listing. Claude also pointed out that the "no outfit" branch can't trigger, because `suggest_outfit` already returns a generic sentence when the model returns blank text.
+- *What I changed:* I had the size regex accept letters followed by digits ("W28") and slashes ("S/M"), then re-ran the parser on "size W28", "size S/M", "size US 9" and "size M". I kept the blank-outfit check in the loop as a guard rather than deleting it.
 
 **Moment 2**
 
-- *What I asked for:*
-- *What came back:*
-- *What I changed:*
+- *What I asked for:* I wanted a message to be generated when the search comes back empty. Claude implemented it as a fixed template, not a model call, and I then asked it to read the message as a user who knows nothing about the app and say what they would try next.
+- *What came back:* The message names the keywords, size and budget that were applied, so a user knows what to change, but the three suggestions are chained as "Try to … or … or …" and don't say which change is most likely to help. Running a second query ("black boots under $70") also showed that `search_listings` can put unrelated items first (biker shorts ranked above boots), because "black" matches almost every listing.
+- *What I changed:* I kept the template, since a fixed message is deterministic and can be tested, and my README states that choice. I have not yet changed the wording of the message or the ranking in `search_listings`; both are open items for unit 4.
 
 <!-- ═══════════════════════ UNIT 4 — THE TEST ═══════════════════════
 
