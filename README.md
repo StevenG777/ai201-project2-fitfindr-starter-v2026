@@ -60,23 +60,39 @@
 ### `search_listings`
 
 - **What it does:**
-- **Inputs:** <!-- name and type each: `max_price` (float), not "a price" -->
+     Filters the listings in `data/listings.json` by size and price, then ranks the remaining items by how well their title, description, and style tags match the user's keywords.
+- **Inputs:**
+     - `description` (str): keywords for what the user wants, e.g. `"vintage graphic tee"`.
+     - `size` (str | None): the size the user wants, e.g. `"M"`.
+     - `max_price` (float | None): price ceiling in dollars, inclusive, e.g. `30.00`.
 - **Returns:**
+     A `list[dict]` of listing dicts. Each dict has the keys `id` (str), `title` (str), `description` (str), `category` (str), `style_tags` (list[str]), `size` (str), `condition` (str), `price` (float), `colors` (list[str]), `brand` (str), and `platform` (str).
 - **When it has nothing:**
+     An empty list `[]`. it never an exception.
 
 ### `suggest_outfit`
 
 - **What it does:**
+     Combine one listing with pieces the user already owns and suggest one or two outfits.
 - **Inputs:**
+     - `new_item` (dict): one listing dict, i.e. a single element of `search_listings`' result.
+     - `wardrobe` (dict): a dict with an `items` key holding a list of dicts, each with `id` (str), `name` (str), `category` (str, one of tops / bottoms / outerwear / shoes / accessories), `colors` (list[str]), `style_tags` (list[str]), and `notes` (str | None).
 - **Returns:**
+     A non-empty `str` of one or two outfit suggestions. When the wardrobe has items, the text names specific pieces from it.
 - **When it has nothing:**
+     If `wardrobe["items"]` is empty, it returns general styling advice for `new_item` as a non-empty string. It does not raise and does not return `""`.
 
 ### `create_fit_card`
 
 - **What it does:**
+     Writes a short social-media-style caption for the thrifted find, based on the outfit suggestion.
 - **Inputs:**
+     - `outfit` (str): the string returned by `suggest_outfit`.
+     - `new_item` (dict): the same listing dict that was passed to `suggest_outfit`.
 - **Returns:**
+     A `str` of two to four sentences that reads like a real post, mentions the item, its price, and its platform once each, and gives a specific vibe.
 - **When it has nothing:**
+     If `outfit` is empty or whitespace, it returns a descriptive message string (e.g. `"No outfit suggestion to write a caption from."`). It does not raise.
 
 ---
 
