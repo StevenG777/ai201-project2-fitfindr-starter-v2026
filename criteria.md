@@ -25,9 +25,10 @@ Given a query that matches at least one listing, the agent completes all three
 tool calls and returns a fit card — in at least 4 of 5 tries.
 
 **Why this target:**
-<!-- Why 4 of 5 and not 5 of 5? Something about your search, probably —
-     "my search is a plain keyword match and some phrasings will miss" is a
-     real answer. -->
+`suggest_outfit` calls a model and is allowed to return an empty output. When it
+does, the loop branches out and never calls `create_fit_card`, so a run can
+legitimately miss the third tool even when the search worked. That's why 4 of 5
+and not 5 of 5.
 
 ---
 
@@ -37,66 +38,65 @@ Given a query that matches no listings, the agent stops before calling
 `suggest_outfit` and returns a message naming what to change — 5 of 5 tries.
 
 **Why this target:**
-<!-- Why is 5 of 5 reasonable here when criterion 1 isn't? What's different
-     about this path? -->
+Once a query matches no listings, the agent must branch out and call no further
+tool, with no exceptions. This path has no model in it, so there's no randomness
+to excuse a miss: it's either working or it isn't.
 
 ---
 
-## 3. Something about state
+## 3. The item search found is the item the next tool received
 
-<!-- YOU WRITE THIS ONE.
-
-     How would you know that the item your search found is the same item the
-     next tool received? Name something countable or observable.
-
-     This is the criterion people find hardest, because state failure doesn't
-     look like state failure — it looks like a tool problem. Something that
-     compares session["selected_item"] against what actually reached
-     suggest_outfit is the shape you're after. -->
-
-
+For 5 different queries, each matching at least one listing, the item passed to
+`suggest_outfit` as `new_item` is exactly equal (full dict equality) to one
+element of the list `search_listings()` returned for that query, found by
+matching `id` — in 5 of 5 queries.
 
 **Why this target:**
-
-
+The agent only passes data from one stage to the next, so there's no randomness
+to excuse a miss: either the right item arrives or it doesn't. Full dict
+equality (not just "same keys") also catches an item that was edited between
+the two tools. <!-- TODO: confirm nothing in agent.py picks or edits the item
+between the tools; if something does, say so here. -->
 
 ---
 
-## 4. Something about the fit card
+## 4. Different items get different fit card openings
 
-<!-- YOU WRITE THIS ONE.
-
-     The fit card calls a model, so the same input can produce different words
-     each time. That's not a bug — it's the nature of the tool. So what would
-     make it acceptable?
-
-     Think about what you'd actually be unhappy to see. A caption that never
-     mentions the price? Two different items producing the same opening
-     sentence? A card longer than a caption anyone would post? Any of those can
-     be turned into a number. -->
-
-
+For 5 listings from 5 different categories, the 5 fit cards returned by
+`create_fit_card` have 5 different opening sentences — 5 of 5. The opening
+sentence is everything up to the first `.`, `!` or `?` that is followed by a
+space (so the `.` in `$24.99` doesn't count), compared
+after lowercasing and trimming whitespace.
 
 **Why this target:**
-
-
+The docstring in `tools.py` says the caption should come out differently for
+different inputs. Two cards sharing an opening means the model is filling in a
+template, so one repeat out of 5 is already a failure. Five items
+give 10 pairs to compare, where two items would give only one. Items come from
+different categories so that two near-identical items can't legitimately open
+the same way.
 
 ---
 
-## 5. Your choice
+## 5. suggest_outfit only names items that exist
 
-<!-- YOU WRITE THIS ONE TOO.
-
-     Pick something you actually care about getting right. Speed, the empty
-     wardrobe path, what happens when the model can't be reached, whether the
-     search respects a price ceiling — anything, as long as it names a number
-     or an observable outcome. -->
-
-
+For 5 different `new_item` inputs, read each
+`suggest_outfit` output and list every item it names. Each named item counts as
+found if, after lowercasing and trimming, it exactly equals `new_item["title"]`
+or the `name` of an item in the wardrobe. In each of the 5 outputs, the number of
+unfound items may be at most 25% of the items named, rounded down, but never
+fewer than 1 allowed — 5 of 5 outputs.
 
 **Why this target:**
+Exact matching will wrongly flag paraphrases (e.g. "black denim jeans" for
+"Black Jeans"), so I allow a small share of misses instead of 0. 
 
-
+I don't know how many items a typical output names, so I loosened the
+requirement a little: a quarter of the named items may go unfound. When 25%
+rounds down to 0 (outputs naming fewer than 4 items), I still allow 1 unfound
+item, because exact matching will miss paraphrases and I'd rather not fail an
+output over one wording difference. 50% would let too many invented items
+through.
 
 ---
 
