@@ -13,6 +13,8 @@ Build and test your three tools in `tools.py` first. Then come here.
     python agent.py          runs both example paths below
 """
 
+import re
+
 import config
 import trace
 from tools import search_listings, suggest_outfit, create_fit_card
@@ -106,10 +108,91 @@ def run_agent(query: str, wardrobe: dict) -> dict:
         than a stack trace. The import is already at the top of this file.
     """
     session = new_session(query, wardrobe)
+    count = 0
 
-    # TODO: delete these two lines and build the loop.
-    session["error"] = "The planning loop isn't built yet — see the TODO in agent.py."
+    # Step 3: parse the query (regex, see _parse_query).
+    session["parsed"] = _parse_query(query)
+
+    # Step 4: search. THE BRANCH: an empty list stops the run before suggest_outfit.
+    count += 1
+    trace.check_iterations(count)
+    parsed = session["parsed"]
+    session["search_results"] = search_listings(
+        parsed["description"], size=parsed["size"], max_price=parsed["max_price"]
+    )
+    if not session["search_results"]:
+        session["error"] = _no_results_message(parsed)
+        return session
+
+    # Step 5: the first result is the pick; later steps read it from the session.
+    session["selected_item"] = session["search_results"][0]
+
+    # Step 6: an empty wardrobe is handled inside suggest_outfit (general advice).
+    count += 1
+    trace.check_iterations(count)
+    session["outfit_suggestion"] = suggest_outfit(
+        session["selected_item"], session["wardrobe"]
+    )
+    if not (session["outfit_suggestion"] or "").strip():
+        session["error"] = (
+            "No outfit suggestion came back for this item, so no fit card was made. "
+            "Try running it again or picking a different search."
+        )
+        return session
+
+    # Step 7
+    count += 1
+    trace.check_iterations(count)
+    session["fit_card"] = create_fit_card(
+        session["outfit_suggestion"], session["selected_item"]
+    )
     return session
+
+
+# ── query parsing and messages ────────────────────────────────────────────────
+
+_FILLER = {"looking", "for", "a", "an", "the", "i", "want", "need", "find", "me",
+           "show", "some", "in", "size", "under", "below", "max", "less", "than", "up", "to"}
+
+
+def _parse_query(query: str) -> dict:
+    """
+    Regex parse (chosen over asking the model: free, deterministic, testable).
+    size: the word(s) after "size" ("size M", "size US 9"). max_price: a number
+    after under/below/max/up to, or any "$N". description: what's left, minus
+    filler words. Cost: phrasings like "size is M" or "30 dollars" are missed.
+    """
+    text = query
+    size = None
+    m = re.search(r"\bsize\s+([A-Za-z]+\d*(?:/[A-Za-z]+)?(?:\s+\d+(?:\.\d+)?)?|\d+(?:\.\d+)?)", text, re.I)
+    if m:
+        size = m.group(1).strip()
+        text = text.replace(m.group(0), " ")
+
+    max_price = None
+    m = (re.search(r"(?:under|below|max|up to|less than)\s*\$?\s*(\d+(?:\.\d+)?)", text, re.I)
+         or re.search(r"\$\s*(\d+(?:\.\d+)?)", text))
+    if m:
+        max_price = float(m.group(1))
+        text = text.replace(m.group(0), " ")
+
+    words = [w for w in re.findall(r"[A-Za-z0-9']+", text) if w.lower() not in _FILLER]
+    return {"description": " ".join(words), "size": size, "max_price": max_price}
+
+
+def _no_results_message(parsed: dict) -> str:
+    """Name the filters that were applied and what to loosen. Not just "no results"."""
+    used = [f"\"{parsed['description']}\""]
+    if parsed["size"]:
+        used.append(f"size {parsed['size']}")
+    if parsed["max_price"] is not None:
+        used.append(f"under ${parsed['max_price']:.0f}")
+    tips = ["use fewer or different keywords (e.g. just the item type, like \"jacket\")"]
+    if parsed["size"]:
+        tips.append("drop the size or try a neighbouring one")
+    if parsed["max_price"] is not None:
+        tips.append(f"raise the ${parsed['max_price']:.0f} budget")
+    return f"Nothing matched {', '.join(used)}. Try to " + ", or ".join(tips) + "."
 
 
 # ── running it directly ───────────────────────────────────────────────────────
