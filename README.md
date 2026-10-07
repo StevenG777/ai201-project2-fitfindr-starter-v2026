@@ -136,19 +136,27 @@ $ python app.py ask '...'
 **The three tools, tested one at a time**
 
 ```
-$ python -c "from tools import search_listings; print(search_listings('graphic tee', max_price=30))"
-
+$ python -c "from tools import search_listings as s; print([(x['title'],x['size'],x['price']) for x in s('graphic tee', size='M', max_price=30)]); print(s('xyzzy'))"
+[('Y2K Baby Tee — Butterfly Print', 'S/M', 18.0), ('Mesh Long-Sleeve Top — Black', 'S/M', 15.0)]
+[]
 ```
 
 ```
-$ python -c "from tools import suggest_outfit; ..."
-
+$ python -c "from tools import suggest_outfit; from utils.data_loader import *; print(suggest_outfit(load_listings()[0], get_example_wardrobe()))"
+**Outfit 1: Casual Streetwear**
+Pair the vintage Levi's 501 jeans with the **White ribbed tank top** tucked in for a fitted silhouette. Layer the **Oversized grey crewneck sweatshirt** over your shoulders... Step into the **Chunky white sneakers** and accessorize with the **Black crossbody bag**...
+(empty wardrobe, get_empty_wardrobe(): returns general advice — "These vintage Levi's 501s are the ultimate wardrobe building block. Look 1: Casual Streetwear...")
 ```
 
 ```
-$ python -c "from tools import create_fit_card; ..."
-
+$ python -c "from tools import create_fit_card as c; from utils.data_loader import load_listings as l; [print(c('jeans and white sneakers', l()[0])) for _ in range(3)]; print(c('  ', l()[0]))"
+Found the holy grail of vintage Levi's 501 jeans while scrolling on depop today... For just $38.00, these give off the ultimate effortless 90s off-duty model vibe...
+Found the holy grail of denim today—these vintage Levi's 501 jeans... Grab them on my depop for just $38.00 before I change my mind...
+Found the holy grail of denim today: these broken-in Vintage Levi's 501 Jeans... Can't believe my luck finding them on depop for just $38.00...
+No outfit suggestion to write a caption from.
 ```
+
+Three runs differ (TEMPERATURE 0.9, cache bypassed in this tool). Size match is whole-token: "M" matches "M", "S/M", "M/L", never "XL" or "US 9".
 
 ---
 
