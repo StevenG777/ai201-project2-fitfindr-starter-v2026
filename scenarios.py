@@ -47,7 +47,36 @@ SCENARIOS = [
     # For a fit-card criterion, you probably want the SAME query listed more
     # than once, or several different items, depending on what your criterion
     # actually says.
+    #
+    # (Criteria 3, 4 and 5 are added programmatically just below the list.)
 ]
+
+# Criteria 3, 4 and 5 each say "5 different queries/items". These five queries'
+# top search hit falls in five different categories (bottoms, tops, outerwear,
+# shoes, accessories), which criterion 4 requires; 3 and 5 reuse them.
+# Try N of criterion 3/4/5 = the Nth query here.
+_FIVE_ITEM_QUERIES = [
+    "vintage levi's 501 jeans",
+    "y2k butterfly baby tee",
+    "cropped denim jacket",
+    "black platform mary janes",
+    "tan leather shoulder bag",
+]
+
+_FIVE_ITEM_NAMES = {
+    3: "item passed on matches search result",
+    4: "fit card openings differ across categories",
+    5: "outfit names only real items",
+}
+
+for _criterion, _label in _FIVE_ITEM_NAMES.items():
+    for _query in _FIVE_ITEM_QUERIES:
+        SCENARIOS.append({
+            "name": f"{_label}: {_query}",
+            "query": _query,
+            "wardrobe": "example",
+            "criterion": _criterion,
+        })
 
 WARDROBES = ("example", "empty")
 

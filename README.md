@@ -194,61 +194,73 @@ Three runs differ (TEMPERATURE 0.9, cache bypassed in this tool). Size match is 
 
 ## Run Log — Before
 
-<!-- Five criteria, five tries each, in this exact format.
+Run: `python run_eval.py --label before` (2026-10-14 20:58, caching off, temperature 0.9). Raw output: `results/run_2026-10-14_2058_before.md`.
 
-     Five, because your criteria are written out of five. Mark each try PASS
-     or FAIL, count the passes, and read that count against your target — a
-     row targeting 4 of 5 with three PASS cells is MISSED (3/5).
-
-     `python run_eval.py --label before` runs everything and writes the table
-     into results/. Paste it here and fill in the verdicts. -->
+Criteria 3, 4 and 5 are each "5 different queries / items", so Try N of those rows is the Nth of the five queries in `scenarios.py` (`_FIVE_ITEM_QUERIES`) — a try passes only if its query passes.
 
 | Criterion | Target | Try 1 | Try 2 | Try 3 | Try 4 | Try 5 | Verdict |
 |---|---|---|---|---|---|---|---|
-| 1.  |  |  |  |  |  |  |  |
-| 2.  |  |  |  |  |  |  |  |
-| 3.  |  |  |  |  |  |  |  |
-| 4.  |  |  |  |  |  |  |  |
-| 5.  |  |  |  |  |  |  |  |
+| 1. A matching query completes all three tools | 4 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 2. An impossible query stops before the second tool | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 3. The item search found is the item the next tool received | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 4. Different items get different fit card openings | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 5. suggest_outfit only names items that exist | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
 
-**Real output from one try**, pasted as text, naming the file and function
-that produced it:
+**Real output from one try**, produced by `agent.py::run_agent` (messages by `agent.py::_no_results_message`, text by `tools.py::suggest_outfit` / `create_fit_card`):
+
+Criterion 1 — `vintage graphic tee under $30`, try 1. Selected `Vintage Band Tee — Faded Grey ($19.0, depop)`; fit card:
 
 ```
+Found this faded grey vintage band tee on depop for just $19 and I'm literally obsessed. Perfect for channeling the ultimate 90s grunge vibe with baggy denim and combat boots, or keeping it chill with wide-leg trousers. Grab it before I change my mind and keep it for myself!
+```
 
+Criterion 2 — `designer ballgown size XXS under $5`, try 1. Trace ended at step 2 (`search_listings (via MCP)` returned `[]`, "branch: empty, stopping before suggest_outfit"); `session["error"]`:
+
+```
+Nothing matched "designer ballgown", size XXS, under $5. Try to use fewer or different keywords (e.g. just the item type, like "jacket"), or drop the size or try a neighbouring one, or raise the $5 budget.
+```
+
+Criterion 3 — try 1 (`vintage levi's 501 jeans`): trace step 3 `select_item` returned `Vintage Levi's 501 Jeans — Medium Wash ($38.0, depop)`, the first of the search results.
+
+Criterion 4 — try 1, the five fit-card opening sentences (lowercased), all different:
+
+```
+found these dream medium wash vintage levi's 501s and i'm obsessed.
+not over me crying over this y2k butterfly baby tee 😭 it's giving total early 2000s streetwear energy, especially paired with baggy denim and a zip hoodie.
+still kicking myself for finding this light wash cropped denim jacket on poshmark for just $42.
+found my ultimate 90s streetwear holy grail on depop for $55 and i'm literally never taking these black patent platform mary janes off.
+still screaming about finding this gorgeous little tan leather mini shoulder bag on poshmark for just $38!
+```
+
+Criterion 5 — try 1, `y2k butterfly baby tee`, `tools.py::suggest_outfit`:
+
+```
+**Outfit 1 (Y2K Streetwear):**
+Pair the baby tee with the **Baggy straight-leg jeans, dark wash**. Layer the **Black cropped zip hoodie** over top (left unzipped to show the butterfly graphic). Finish the look with the **Chunky white sneakers** and the **Black crossbody bag**. 
+
+**Outfit 2 (Casual Contrast):**
+Combine the baby tee with the **Wide-leg khaki trousers**, cinched at the waist with the **Brown leather belt**. Throw the **Vintage black denim jacket** over your shoulders and wear the **Black combat boots** to ground the soft pink and purple tones with a touch of edge.
 ```
 
 ---
 
 ## Verdicts and Diagnoses
 
-<!-- MET or MISSED per criterion against LAST UNIT's target, plus a sentence on
-     how you decided.
-
-     Then, for every miss: which of the four places it happened — a tool, the
-     loop's branch, the session, or the model's output — AND the mechanism.
-
-     Not a diagnosis:  "The fit card was bad."
-     A diagnosis:      "The fit card criterion missed on 2 of 5 items. Both had
-                        an empty brand field. My prompt puts the brand in the
-                        first sentence, so the card opened with a blank and read
-                        like a fragment. The tool worked; the prompt assumed a
-                        field that isn't always there."
-
-     Look for a pattern. Three misses on the same tool is one problem, not
-     three. -->
-
 | # | Criterion | Target | Verdict | How I decided |
 |---|---|---|---|---|
-| 1 |  |  |  |  |
-| 2 |  |  |  |  |
-| 3 |  |  |  |  |
-| 4 |  |  |  |  |
-| 5 |  |  |  |  |
+| 1 | Matching query completes all three tools | 4 of 5 | MET (5/5) | All 5 tries returned a fit card; `stopped early: no` in every one. |
+| 2 | Impossible query stops before tool 2 | 5 of 5 | MET (5/5) | All 5 tries ended at the search step with the same message naming what to change; no `suggest_outfit` step in any trace. |
+| 3 | Item passed on = item search returned | 5 of 5 | MET (5/5) | `agent.py::run_agent` sets `selected_item = search_results[0]` and nothing edits it before `suggest_outfit`, so it is the same dict. Traces confirm the selected title is the top search hit for all 5 queries. |
+| 4 | Different openings across 5 categories | 5 of 5 | MET (5/5) | Split each card at the first `.`/`!`/`?` followed by a space, lowercased: 5 distinct openings in each of the 5 tries. |
+| 5 | suggest_outfit only names real items | 5 of 5 | MET (5/5) | Applied the rule literally (exact match on `new_item["title"]` or wardrobe `name`, allowance = max(1, floor(25% of items named))). Every output passed, but only because of the allowance: the unfound items were always paraphrases, never inventions. |
 
 **Diagnoses**
 
+No criterion was missed in this run, so there is no miss to diagnose. These are the weak spots I can see in the data, none of which crossed a target:
 
+- **Criterion 5 passes on the allowance, not on exact matching.** The model never names `new_item["title"]` verbatim ("the baby tee", "the mini shoulder bag"), and drops ", dark wash" from the jeans. That is 1–2 unfound items per output, and 2 is the limit for outputs naming 8–9 items. 10 of 25 outputs sat exactly at the limit. Nothing invented was named in any of the 25 outputs. In "cropped denim jacket" try 4 the model also leaked tag lists into the text ("(dark blue, indigo)", "(white, sneakers, chunky, streetwear)"), a prompt/output problem in `tools.py::suggest_outfit` that this criterion doesn't catch.
+- **Criterion 4 passes because the items differ, not because the model varies.** Across categories the openings are distinct, but for one item across tries they repeat: "still not over finding these (black) patent platform mary janes on depop" opens tries 1 and 4 of the criterion-3 runs and tries 4 and 5 of the criterion-4 runs, and "still … finding" is a template for many openings. The criterion as written can't see this.
+- **Criterion 1 never exercised its excuse.** `suggest_outfit` never returned empty in 5 tries, so the 4-of-5 allowance was not used.
 
 ---
 
