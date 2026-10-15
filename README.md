@@ -185,6 +185,12 @@ Three runs differ (TEMPERATURE 0.9, cache bypassed in this tool). Size match is 
 - *What came back:* The message names the keywords, size and budget that were applied, so a user knows what to change, but the three suggestions are chained as "Try to … or … or …" and don't say which change is most likely to help. Running a second query ("black boots under $70") also showed that `search_listings` can put unrelated items first (biker shorts ranked above boots), because "black" matches almost every listing.
 - *What I changed:* I kept the template, since a fixed message is deterministic and can be tested, and my README states that choice. I have not yet changed the wording of the message or the ranking in `search_listings`; both are open items for unit 4.
 
+**Moment 3 (unit 4)**
+
+- *What I asked for:* After running `run_eval.py --label before`, I asked Claude to score my five criteria from the results file and, for criterion 5 and 4, show me a worked pass/fail example. I then asked it to argue the opposite verdict.
+- *What came back:* All five MET. It parsed the results file with a script, for criterion 5 applying the exact-match rule plus a hand-written list of paraphrases for the wardrobe names. Its strongest counter-argument was that criterion 5 passed only because of the 25% allowance (10 of 25 outputs sat exactly at the limit), and that criterion 4 compares different items, which makes distinct openings nearly guaranteed.
+- *What I changed:* I picked the criterion 5 weakness as my one improvement and had the `suggest_outfit` prompt require exact titles and names with no tag lists. Unfound items per output fell from 1.32 to 0.08. I kept the criteria as written and did not loosen any.
+
 <!-- ═══════════════════════ UNIT 4 — THE TEST ═══════════════════════
 
      Don't fill these in during unit 3.
@@ -276,64 +282,93 @@ No criterion was missed in this run, so there is no miss to diagnose. These are 
      the same length, your branch isn't working — and this is the fastest way
      anyone will ever find that out. -->
 
-**Happy path**
+**Happy path** — `python run_eval.py --label after`, "matching query completes", try 1 (`vintage graphic tee under $30`). Step 2 is the MCP call.
 
 ```
-
+[1] parse_query
+      in:  vintage graphic tee under $30
+      out: dict with keys: description, size, max_price
+[2] search_listings (via MCP)
+      in:  dict with keys: description, size, max_price
+      out: 10 items: Vintage Band Tee — Faded Grey, Graphic Tee — 2003 Tour Bootleg Style, Y2K Baby Tee — Butterfly Print … +7 more
+[3] select_item
+      in:  first of search_results
+      out: Vintage Band Tee — Faded Grey ($19.0, depop)
+[4] suggest_outfit
+      in:  Vintage Band Tee — Faded Grey + wardrobe of 10 items
+      out: **Outfit 1:** Pair the **Vintage Band Tee — Faded Grey** with the **Baggy straight-leg jeans, dark wash**, **B…
+[5] create_fit_card
+      in:  outfit + Vintage Band Tee — Faded Grey
+      out: Found the holy grail faded grey vintage band tee on depop for just $19.00 and I’m literally never taking it of…
 ```
 
-**Empty search**
+**Empty search** — "impossible query stops early", try 1 (`designer ballgown size XXS under $5`). Two steps instead of five; it stops at the branch.
 
 ```
-
+[1] parse_query
+      in:  designer ballgown size XXS under $5
+      out: dict with keys: description, size, max_price
+[2] search_listings (via MCP)
+      in:  dict with keys: description, size, max_price
+      out: [] (empty)
+      →    branch: empty, stopping before suggest_outfit
 ```
 
-**On the MCP move:** <!-- what changed in your code, and whether anything
-behaved differently afterwards. If the rewire didn't work, say exactly where it
-broke — the error text and the last thing that worked. That earns the point in
-full. -->
+**On the MCP move:** `search_listings` is registered as a tool in `mcp_server.py`. In `agent.py::run_agent` I replaced the direct call `search_listings(description, size=..., max_price=...)` with `mcp_client.call_tool("search_listings", {"description", "size", "max_price"})`; `suggest_outfit` and `create_fit_card` are still called directly. The agent works the same through MCP: every matching-query try in both run logs returned results, the traces show the same top hit for the same query, and the empty case still returns `[]` and stops. I did not diff the MCP result against the old direct result field by field, so I can't say nothing differs, only that nothing I measured did.
 
-
+**The three failure modes:** the empty-search message is shown above and in the run log. The empty-wardrobe run is in `results/run_2026-10-14_2058_before.md` ("empty wardrobe", `denim jacket under $50`): it returned general styling advice and a fit card, no crash. The model-unavailable handler is `agent.py::_model_unavailable_message` (it names the missing connection and says to check `GEMINI_API_KEY` in `.env` and the network, then re-run). <!-- TODO (author): paste the exact text you saw when you broke the key, if you ran it; it is not in the eval logs. -->
 
 ---
 
 ## The Improvement
 
-<!-- What you changed, why your diagnosis pointed at it, and the after-run in
-     the same table format. One change, measured properly.
+**What I changed:** one edit to the prompt in `tools.py::suggest_outfit` (non-empty-wardrobe branch only). The old closing instruction was "Name the wardrobe pieces exactly as listed." The new one tells the model to refer to the new piece by its exact title, word for word (the real title is filled into the prompt), to refer to each wardrobe piece by its exact name as listed including words after a comma, and not to describe pieces with colors, tags or parenthetical lists. The empty-wardrobe prompt, the fallback sentence, the 120-word limit and the temperature are unchanged. Nothing else in the repo changed between the two runs.
 
-     `python run_eval.py --label after` -->
-
-**What I changed:**
-
-**Which failure it was meant to fix:**
+**Which failure it was meant to fix:** the weak spot in criterion 5 (model output, `suggest_outfit`). Before, the model never named the new item by its exact title and dropped ", dark wash" from the jeans, so every output had 1–2 unfound items, and it passed only because of the 25% allowance (10 of 25 outputs sat exactly at the limit). One output also leaked tag lists in parentheses.
 
 ### Run Log — After
 
+Run: `python run_eval.py --label after`. Raw output: `results/run_2026-10-14_2257_after.md`. Same scenarios, 5 tries, caching off.
+
 | Criterion | Target | Try 1 | Try 2 | Try 3 | Try 4 | Try 5 | Verdict |
 |---|---|---|---|---|---|---|---|
-| 1.  |  |  |  |  |  |  |  |
-| 2.  |  |  |  |  |  |  |  |
-| 3.  |  |  |  |  |  |  |  |
-| 4.  |  |  |  |  |  |  |  |
-| 5.  |  |  |  |  |  |  |  |
+| 1. A matching query completes all three tools | 4 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 2. An impossible query stops before the second tool | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 3. The item search found is the item the next tool received | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 4. Different items get different fit card openings | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 5. suggest_outfit only names items that exist | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
 
-**Did it help, and how do I know:**
+Criterion 5, measured on the 25 outputs (5 queries x 5 tries), same literal exact-match rule and allowance both times:
 
-<!-- If it made things worse, say that. Honestly reported, that earns full
-     credit and is more interesting than one that worked. -->
+| Measure | Before | After |
+|---|---|---|
+| Average unfound items per output | 1.32 | 0.08 |
+| Outputs sitting exactly at the allowance limit | 10 of 25 | 1 of 25 |
+| Outputs with a parenthetical tag list | 1 | 0 |
+| Outputs over the limit (fail) | 0 | 0 |
 
+Example, "cropped denim jacket" try 1 after the change (`tools.py::suggest_outfit`):
 
+```
+Outfit 1: Pair the **Denim Jacket — Light Wash, Cropped** with the **White ribbed tank top** and the **Baggy straight-leg jeans, dark wash**. Add the **Chunky white sneakers** and the **Black crossbody bag** to complete a street-style denim-on-denim look.
+```
+
+**Did it help, and how do I know:** Yes, on the thing I targeted. The pass/fail verdicts did not change (all five were MET before and after, so they could not show an improvement). The measured difference is in how close criterion 5 sat to failing: unfound items per output fell from 1.32 to 0.08, and only 1 of 25 outputs is at the limit instead of 10. The one parenthetical leak is gone. Caveats: this is one 5-try run of each, and the model is random, so a small difference could be noise, but a drop this large across 25 outputs is unlikely to be. Cost: the text now repeats the full listing title ("Denim Jacket — Light Wash, Cropped") instead of "the jacket", so it reads stiffer, and some outputs lost their "Outfit 1" headings. Criteria 4 and 1–3 were not targeted and did not move.
 
 ---
 
 ## What's Still Broken
 
-<!-- For each criterion still missed: what you'd do, and why you stopped where
-     you did. "I ran out of time" is fine if it's true. Pretending nothing is
-     left is not. -->
+No criterion is currently missed, in either run, so there is nothing to fix for a miss. This is what I think is still weak, and why I stopped.
 
+- **Criterion 5 passes on a loose rule.** After the change, unfound items average 0.08 per output, but the criterion still counts a paraphrase as an unfound item and then forgives it with a 25% allowance, and "items named" is partly my own judgment (I used a hand-written list of paraphrases). I would make the check automatic by having the model return the items it used as a list and comparing that list to the wardrobe. I stopped because the brief limits this unit to one improvement.
+- **Criterion 4 can't see repetition for one item.** Openings differ across items, but the same item gets "still not over finding these…" across tries. I would add a check that runs the same item five times and compares those openings. I did not rewrite the `create_fit_card` prompt because no criterion failed, and it would have been a second change.
+- **Criterion 3 passes by construction.** The agent takes `search_results[0]` and nothing edits it. I did not log a real dict-equality check.
+- **Criterion 1's 4-of-5 allowance was never used.** `suggest_outfit` never returned empty in 10 tries, so I haven't seen the third-tool branch fire in a real run.
+- **Open from unit 3:** `search_listings` ranking puts unrelated items first when a broad word like "black" matches almost everything ("black boots under $70" ranked biker shorts above boots), and the empty-search message chains "Try to … or … or" without saying which change helps most. Not in any of my five criteria, so left alone.
+- **Tests were one run each.** Each log is one 5-try run at temperature 0.9. A second run could differ by a try or two.
 
+---
 
 <!-- ═════════════════════════════════════════════════════════════════════
 

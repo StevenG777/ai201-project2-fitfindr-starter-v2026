@@ -306,7 +306,10 @@ def suggest_outfit(new_item: dict, wardrobe: dict) -> str:
             f"Someone is thinking of buying this thrifted piece:\n{item_text}\n\n"
             f"Their wardrobe:\n{owned}\n\n"
             "Suggest one or two outfits that combine the new piece with items from the "
-            "wardrobe. Name the wardrobe pieces exactly as listed. Keep it under 120 words."
+            "wardrobe. Refer to the new piece by its exact title, word for word, "
+            f"\"{new_item['title']}\", and to each wardrobe piece by its exact name as listed "
+            "above, including any words after a comma. Do not describe pieces with colors, tags "
+            "or parenthetical lists. Keep it under 120 words."
         )
     # Our choice: generic fallback keeps the non-empty promise (note 6).
     return generate(prompt, temperature=config.TEMPERATURE).strip() or (
