@@ -113,6 +113,7 @@ def run_agent(query: str, wardrobe: dict) -> dict:
 
     # Step 3: parse the query (regex, see _parse_query).
     session["parsed"] = _parse_query(query)
+    trace.step("parse_query", inputs=query, returned=session["parsed"])
 
     # Step 4: search. THE BRANCH: an empty list stops the run before suggest_outfit.
     count += 1
@@ -123,31 +124,64 @@ def run_agent(query: str, wardrobe: dict) -> dict:
         "size": parsed["size"],
         "max_price": parsed["max_price"],
     })
-    if not session["search_results"]:
+    empty = not session["search_results"]
+    trace.step(
+        "search_listings (via MCP)",
+        inputs=parsed,
+        returned=session["search_results"],
+        note="branch: empty, stopping before suggest_outfit" if empty else "",
+    )
+    if empty:
         session["error"] = _no_results_message(parsed)
         return session
 
     # Step 5: the first result is the pick; later steps read it from the session.
     session["selected_item"] = session["search_results"][0]
+    trace.step("select_item", inputs="first of search_results",
+               returned=session["selected_item"])
 
     # Step 6: an empty wardrobe is handled inside suggest_outfit (general advice).
     count += 1
     trace.check_iterations(count)
-    session["outfit_suggestion"] = suggest_outfit(
-        session["selected_item"], session["wardrobe"]
+    try:
+        session["outfit_suggestion"] = suggest_outfit(
+            session["selected_item"], session["wardrobe"]
+        )
+    except ModelUnavailable as exc:
+        session["error"] = _model_unavailable_message(exc)
+        trace.step("suggest_outfit", inputs=session["selected_item"],
+                   note="model unavailable, stopping")
+        return session
+    wardrobe_size = len((session["wardrobe"] or {}).get("items") or [])
+    trace.step(
+        "suggest_outfit",
+        inputs=f"{session['selected_item'].get('title')} + wardrobe of {wardrobe_size} items",
+        returned=session["outfit_suggestion"],
+        note="empty wardrobe: general advice" if wardrobe_size == 0 else "",
     )
     if not (session["outfit_suggestion"] or "").strip():
         session["error"] = (
             "No outfit suggestion came back for this item, so no fit card was made. "
             "Try running it again or picking a different search."
         )
+        trace.step("suggest_outfit", note="branch: empty suggestion, stopping")
         return session
 
     # Step 7
     count += 1
     trace.check_iterations(count)
-    session["fit_card"] = create_fit_card(
-        session["outfit_suggestion"], session["selected_item"]
+    try:
+        session["fit_card"] = create_fit_card(
+            session["outfit_suggestion"], session["selected_item"]
+        )
+    except ModelUnavailable as exc:
+        session["error"] = _model_unavailable_message(exc)
+        trace.step("create_fit_card", note="model unavailable, stopping")
+        return session
+    trace.step(
+        "create_fit_card",
+        inputs=f"outfit + {session['selected_item'].get('title')}",
+        returned=session["fit_card"],
     )
     return session
 
@@ -181,6 +215,15 @@ def _parse_query(query: str) -> dict:
 
     words = [w for w in re.findall(r"[A-Za-z0-9']+", text) if w.lower() not in _FILLER]
     return {"description": " ".join(words), "size": size, "max_price": max_price}
+
+
+def _model_unavailable_message(exc: Exception) -> str:
+    """Say what broke (the model couldn't be reached) and what the user can try."""
+    return (
+        f"The model couldn't be reached, so no outfit or fit card was made. {exc} "
+        "Check GEMINI_API_KEY in your .env file and your internet connection, "
+        "then run the query again."
+    )
 
 
 def _no_results_message(parsed: dict) -> str:
